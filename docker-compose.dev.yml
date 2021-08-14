@@ -1,0 +1,82 @@
+version: "3.8"
+
+services:
+  web:
+    build: ./api
+    command: ["python", "manage.py", "runserver", "0.0.0.0:${DJANGO_PORT}"]
+    volumes:
+      - static_volume:/home/app/web/static # <-- bind the static volume
+      - media_volume:/home/app/web/media # <-- bind the media volume
+    env_file:
+      - config/django/.env.dev
+    expose:
+      - ${DJANGO_PORT} 
+    networks:
+      - traefik_network
+      - database_network_1
+    depends_on:
+      - db
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.web.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.web.entrypoints=webinsecure"
+      - "traefik.docker.network=${COMPOSE_PROJECT_NAME}_traefik_network"
+  nginx:
+    image: nginx:latest
+    networks:
+      - traefik_network
+    expose:
+      - 80
+    volumes:
+      - ./config/nginx/conf.dev.d:/etc/nginx/conf.d
+      - static_volume:/home/app/web/static # <-- bind the static volume
+      - media_volume:/home/app/web/media # <-- bind the media volume
+    depends_on:
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.nginx.rule=(Host(`${DOMAIN}`) && PathPrefix(`/static`))|| (Host(`${DOMAIN}`) && PathPrefix(`/media`))"
+      - "traefik.docker.network=${COMPOSE_PROJECT_NAME}_traefik_network"
+
+  traefik:
+    image: "traefik:latest"
+    container_name: "traefik"
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.network=${COMPOSE_PROJECT_NAME}_traefik_network"
+      - "--providers.docker.watch=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--log.level=DEBUG"
+      - "--entrypoints.webinsecure.address=:80"
+    ports:
+      - "8000:80"
+      - "8080:8080"
+    networks:
+      - traefik_network
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    depends_on:
+      - web
+      - nginx
+              
+  db:
+    image: postgres:latest
+    env_file:
+      - config/db/.env.dev
+    networks:
+      - database_network_1
+    volumes:
+      - database_volume:/var/lib/postgresql/data
+
+networks:
+  traefik_network:
+    driver: bridge
+  database_network_1:
+    driver: bridge
+
+volumes:
+  database_volume: # Database Persistance Volume
+  static_volume: # Static Django Files
+  media_volume: # Media Uploaded Files
+  letsencrypt: # HTTPS Certs
