@@ -15,6 +15,8 @@ Including another URLconf
 """
 from django.urls import path, include
 from django.contrib import admin
+from django.views.generic import TemplateView
+from rest_framework.schemas import get_schema_view
 
 admin.autodiscover()
 
@@ -22,4 +24,17 @@ admin.autodiscover()
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("auth/", include("users.urls")),
+    path(
+        "openapi/",
+        get_schema_view(title="Hackerand Project", description="", version="0.1.0"),
+        name="openapi-schema",
+    ),
+    path(
+        "docs/",
+        TemplateView.as_view(
+            template_name="swagger-ui.html",
+            extra_context={"schema_url": "openapi-schema"},
+        ),
+        name="documentaion-ui",
+    ),
 ]
